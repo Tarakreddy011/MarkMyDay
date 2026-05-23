@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 
 class NotificationViewModel(application: Application) : AndroidViewModel(application) {
@@ -44,52 +46,49 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
 
         listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                Log.d("NotificationVM", "Data received. Count: ${snapshot.childrenCount}")
-                val fetchedNotifications = mutableListOf<NotificationData>()
-                for (doc in snapshot.children) {
-                    try {
-                        // CRITICAL FIX: Check if data is an object before parsing
-                        if (doc.value is String) {
-                            Log.e("NotificationVM", "Invalid data type (String) at key: ${doc.key}. Skipping.")
-                            continue
-                        }
-                        
-                        val item = doc.getValue(NotificationData::class.java)
-                        if (item != null) {
-                            val audienceOriginal = item.audience
-                            val audienceLower = audienceOriginal.lowercase()
-                            val userRole = decodedRole.lowercase()
-                            val currentUid = auth.currentUser?.uid
-                            
-                            // Client-side filtering
-                            val show = when {
-                                userRole.contains("admin") || 
-                                userRole.contains("principal") || 
-                                userRole.contains("headmaster") -> true
+                viewModelScope.launch {
+                    val fetchedNotifications = withContext(Dispatchers.Default) {
+                        Log.d("NotificationVM", "Data received. Count: ${snapshot.childrenCount}")
+                        val list = mutableListOf<NotificationData>()
+                        for (doc in snapshot.children) {
+                            try {
+                                if (doc.value is String) continue
                                 
-                                userRole.contains("teacher") -> 
-                                    audienceLower == "all" || 
-                                    audienceLower == "teachers" || 
-                                    audienceLower == "teacher" || 
-                                    audienceOriginal == currentUid
+                                val item = doc.getValue(NotificationData::class.java)
+                                if (item != null) {
+                                    val audienceOriginal = item.audience
+                                    val audienceLower = audienceOriginal.lowercase()
+                                    val userRole = decodedRole.lowercase()
+                                    val currentUid = auth.currentUser?.uid
                                     
-                                // For students, show general notifications OR those specifically for their ID (case-sensitive)
-                                else -> audienceLower == "all" || audienceOriginal == currentUid
-                            }
+                                    val show = when {
+                                        userRole.contains("admin") || 
+                                        userRole.contains("principal") || 
+                                        userRole.contains("headmaster") -> true
+                                        
+                                        userRole.contains("teacher") -> 
+                                            audienceLower == "all" || 
+                                            audienceLower == "teachers" || 
+                                            audienceLower == "teacher" || 
+                                            audienceOriginal == currentUid
+                                            
+                                        else -> audienceLower == "all" || audienceOriginal == currentUid
+                                    }
 
-                            if (show) {
-                                fetchedNotifications.add(item)
+                                    if (show) {
+                                        list.add(item)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("NotificationVM", "Error parsing notification: ${doc.key}", e)
                             }
                         }
-                    } catch (e: Exception) {
-                        Log.e("NotificationVM", "Error parsing notification: ${doc.key}", e)
+                        list.sortedByDescending { it.timestamp }
                     }
+                    
+                    _notifications.value = fetchedNotifications
+                    checkUnreadStatus(fetchedNotifications)
                 }
-                
-                val sortedList = fetchedNotifications.sortedByDescending { it.timestamp }
-                Log.d("NotificationVM", "Filtered notifications count: ${sortedList.size}")
-                _notifications.value = sortedList
-                checkUnreadStatus(sortedList)
             }
 
             override fun onCancelled(error: DatabaseError) {

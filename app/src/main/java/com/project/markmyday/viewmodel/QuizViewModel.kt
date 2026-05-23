@@ -20,6 +20,9 @@ class QuizViewModel : ViewModel() {
     private val _bankQuestions = MutableStateFlow<List<Question>>(emptyList())
     val bankQuestions: StateFlow<List<Question>> = _bankQuestions
 
+    private val _availableTests = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val availableTests: StateFlow<List<Pair<String, String>>> = _availableTests
+
     fun uploadCsv(context: Context, uri: Uri) {
         viewModelScope.launch {
             _uploadStatus.value = UploadStatus.Loading
@@ -45,8 +48,43 @@ class QuizViewModel : ViewModel() {
             val result = repository.saveManualQuestion(question)
             if (result.isSuccess) {
                 _uploadStatus.value = UploadStatus.Success
+                fetchAvailableTests()
             } else {
                 _uploadStatus.value = UploadStatus.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun saveManualQuestions(questions: List<Question>) {
+        viewModelScope.launch {
+            _uploadStatus.value = UploadStatus.Loading
+            val result = repository.saveManualQuestions(questions)
+            if (result.isSuccess) {
+                _uploadStatus.value = UploadStatus.Success
+                fetchAvailableTests()
+            } else {
+                _uploadStatus.value = UploadStatus.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun fetchAvailableTests() {
+        viewModelScope.launch {
+            repository.getAvailableSubjectsForAdmin().collect {
+                _availableTests.value = it
+            }
+        }
+    }
+
+    fun deleteTest(subject: String, className: String) {
+        viewModelScope.launch {
+            _uploadStatus.value = UploadStatus.Loading
+            val result = repository.deleteQuestionsBySubjectAndClass(subject, className)
+            if (result.isSuccess) {
+                fetchAvailableTests()
+                _uploadStatus.value = UploadStatus.Idle // Or success
+            } else {
+                _uploadStatus.value = UploadStatus.Error(result.exceptionOrNull()?.message ?: "Delete failed")
             }
         }
     }

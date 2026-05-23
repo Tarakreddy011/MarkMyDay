@@ -93,6 +93,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.android.youtube.player)
     implementation(libs.coil.compose)
+    implementation(libs.vicoCompose)
+    implementation(libs.vicoComposeM3)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

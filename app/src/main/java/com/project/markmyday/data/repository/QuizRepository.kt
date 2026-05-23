@@ -72,6 +72,31 @@ class QuizRepository {
         }
     }
 
+    suspend fun saveManualQuestions(questions: List<Question>): Result<Unit> {
+        return try {
+            val batch = firestore.batch()
+            questions.forEach { question ->
+                val docRef = if (question.id.isEmpty()) {
+                    questionCollection.document()
+                } else {
+                    questionCollection.document(question.id)
+                }
+                
+                val questionWithId = if (question.id.isEmpty()) {
+                    question.copy(id = docRef.id)
+                } else {
+                    question
+                }
+                
+                batch.set(docRef, questionWithId)
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 
     suspend fun getAttemptedQuestionIds(studentId: String, className: String): Set<String> {
         return try {
@@ -185,6 +210,39 @@ class QuizRepository {
             emit(subjects)
         } catch (e: Exception) {
             emit(emptyList())
+        }
+    }
+
+    fun getAvailableSubjectsForAdmin(): Flow<List<Pair<String, String>>> = flow {
+        try {
+            val query = questionCollection.get().await()
+            val subjects = query.documents.map { doc ->
+                val sub = doc.getString("subject") ?: "General"
+                val cls = doc.getString("className") ?: "ALL"
+                sub to cls
+            }.distinct()
+            emit(subjects)
+        } catch (e: Exception) {
+            emit(emptyList())
+        }
+    }
+
+    suspend fun deleteQuestionsBySubjectAndClass(subject: String, className: String): Result<Unit> {
+        return try {
+            val query = questionCollection
+                .whereEqualTo("subject", subject)
+                .whereEqualTo("className", className)
+                .get()
+                .await()
+            
+            val batch = firestore.batch()
+            query.documents.forEach { doc ->
+                batch.delete(doc.reference)
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

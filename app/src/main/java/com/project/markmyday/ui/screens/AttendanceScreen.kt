@@ -17,7 +17,6 @@ import com.project.markmyday.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.tooling.preview.Preview
 import com.project.markmyday.ui.theme.MarkMyDayTheme
 import com.project.markmyday.data.model.Student
 import com.project.markmyday.viewmodel.AttendanceSubmissionState
@@ -34,6 +33,7 @@ fun AttendanceScreen(
     val submissionState by viewModel.submissionState.collectAsState()
     val presentStudentsList by viewModel.presentStudentsList.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isEditMode by viewModel.isEditMode.collectAsState()
 
     AttendanceContent(
         assignedClasses = assignedClasses,
@@ -41,11 +41,13 @@ fun AttendanceScreen(
         submissionState = submissionState,
         presentStudentsList = presentStudentsList,
         isLoading = isLoading,
+        isEditMode = isEditMode,
         attendanceStates = viewModel.attendanceStates,
         onBack = onBack,
         onSubmitAttendance = { viewModel.submitAttendance(it) },
         onToggleAttendance = { uid, isPresent -> viewModel.toggleAttendance(uid, isPresent) },
-        onResetSubmissionState = { viewModel.resetSubmissionState() }
+        onResetSubmissionState = { viewModel.resetSubmissionState() },
+        onClassSelected = { viewModel.checkExistingAttendance(it) }
     )
 }
 
@@ -57,11 +59,13 @@ fun AttendanceContent(
     submissionState: AttendanceSubmissionState,
     presentStudentsList: List<String>,
     isLoading: Boolean,
+    isEditMode: Boolean,
     attendanceStates: Map<String, Boolean>,
     onBack: () -> Unit,
     onSubmitAttendance: (String) -> Unit,
     onToggleAttendance: (String, Boolean) -> Unit,
-    onResetSubmissionState: () -> Unit
+    onResetSubmissionState: () -> Unit,
+    onClassSelected: (String) -> Unit
 ) {
     val context = LocalContext.current
     var showSuccessDialog by remember { mutableStateOf(false) }
@@ -71,6 +75,12 @@ fun AttendanceContent(
         assignedClasses[selectedTabIndex]
     } else ""
     val studentsInSelectedClass = studentsByClass[selectedClass] ?: emptyList()
+
+    LaunchedEffect(selectedTabIndex) {
+        if (selectedClass.isNotEmpty()) {
+            onClassSelected(selectedClass)
+        }
+    }
 
     LaunchedEffect(submissionState) {
         when (submissionState) {
@@ -123,7 +133,11 @@ fun AttendanceContent(
                                     modifier = Modifier.size(24.dp)
                                 )
                             } else {
-                                Text(stringResource(R.string.submit_attendance), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (isEditMode) "Update Attendance" else stringResource(R.string.submit_attendance),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }

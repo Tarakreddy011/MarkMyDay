@@ -22,7 +22,7 @@ sealed class AttendanceSubmissionState {
 
 class AttendanceViewModel(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
 ) : ViewModel() {
 
     private val _assignedClasses = MutableStateFlow<List<String>>(emptyList())
@@ -39,7 +39,7 @@ class AttendanceViewModel(
     private val _submissionState = MutableStateFlow<AttendanceSubmissionState>(AttendanceSubmissionState.Idle)
     val submissionState: StateFlow<AttendanceSubmissionState> = _submissionState.asStateFlow()
 
-    private val _isLoading = MutableStateFlow(false)
+    private val _isLoading = MutableStateFlow(value = false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _isHomeTeacher = MutableStateFlow(false)
@@ -47,6 +47,9 @@ class AttendanceViewModel(
 
     private val _presentStudentsList = MutableStateFlow<List<String>>(emptyList())
     val presentStudentsList: StateFlow<List<String>> = _presentStudentsList.asStateFlow()
+
+    private val _isEditMode = MutableStateFlow(false)
+    val isEditMode: StateFlow<Boolean> = _isEditMode.asStateFlow()
 
     init {
         loadTeacherData()
@@ -141,16 +144,21 @@ class AttendanceViewModel(
                             }
                             _studentsByClass.value = grouped
                             
-                            students.forEach { student ->
-                                if (!attendanceStates.containsKey(student.uid)) {
-                                    // Default to false if student is on leave, else true
-                                    attendanceStates[student.uid] = !studentsOnLeave.contains(student.uid)
+                            // Check for existing attendance for the first class in the list
+                            if (assignments.isNotEmpty()) {
+                                checkExistingAttendance(assignments[0])
+                            } else {
+                                students.forEach { student ->
+                                    if (!attendanceStates.containsKey(student.uid)) {
+                                        // Default to false if student is on leave, else true
+                                        attendanceStates[student.uid] = !studentsOnLeave.contains(student.uid)
+                                    }
                                 }
                             }
                         }
                         _isLoading.value = false
                     }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _isLoading.value = false
             }
         }
@@ -158,6 +166,47 @@ class AttendanceViewModel(
 
     fun toggleAttendance(studentId: String, isPresent: Boolean) {
         attendanceStates[studentId] = isPresent
+    }
+
+    fun checkExistingAttendance(classSection: String) {
+        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val subject = _teacherSubject.value
+        val docId = "${dateStr}_${classSection.replace(" ", "_")}_$subject"
+
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("attendance").document(docId).get().await()
+                if (doc.exists()) {
+                    _isEditMode.value = true
+                    val presentUids = doc["present_students"] as? List<*> ?: emptyList<String>()
+                    val absentUids = doc["absent_students"] as? List<*> ?: emptyList<String>()
+
+                    val allStudentsInClass = _studentsByClass.value[classSection] ?: emptyList()
+                    allStudentsInClass.forEach { student ->
+                        if (presentUids.contains(student.uid)) {
+                            attendanceStates[student.uid] = true
+                        } else {
+                            attendanceStates[student.uid] = !absentUids.contains(student.uid)
+                        }
+                    }
+                } else {
+                    _isEditMode.value = false
+                    // Reset to default (Present unless on leave)
+                    val allStudentsInClass = _studentsByClass.value[classSection] ?: emptyList()
+                    
+                    // Fetch leaves again or just use the logic from fetchStudents? 
+                    // To keep it simple, if no doc exists, we default all to true.
+                    // The fetchStudents already handles the leave logic, so we only reset if needed.
+                    allStudentsInClass.forEach { student ->
+                        if (!attendanceStates.containsKey(student.uid)) {
+                            attendanceStates[student.uid] = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _isEditMode.value = false
+            }
+        }
     }
 
     fun submitAttendance(classSection: String) {
@@ -197,11 +246,26 @@ class AttendanceViewModel(
             _submissionState.value = AttendanceSubmissionState.Loading
             try {
                 firestore.collection("attendance").document(docId).set(attendanceData).await()
+                sendAbsenceNotifications(absentStudentsUids, subject, dateStr)
                 _presentStudentsList.value = presentStudentsNames
                 _submissionState.value = AttendanceSubmissionState.Success
             } catch (e: Exception) {
                 _submissionState.value = AttendanceSubmissionState.Error(e.localizedMessage ?: "Submission failed")
             }
+        }
+    }
+
+    private fun sendAbsenceNotifications(absentUids: List<String>, subject: String, date: String) {
+        absentUids.forEach { uid ->
+            val notificationData = hashMapOf(
+                "title" to "Absence Alert",
+                "message" to "You were marked absent for $subject on $date",
+                "timestamp" to com.google.firebase.Timestamp.now()
+            )
+            firestore.collection("users")
+                .document(uid)
+                .collection("notifications")
+                .add(notificationData)
         }
     }
 

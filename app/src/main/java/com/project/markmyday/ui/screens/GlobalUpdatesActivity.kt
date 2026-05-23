@@ -3,7 +3,6 @@ package com.project.markmyday.ui.screens
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -14,8 +13,6 @@ import com.project.markmyday.viewmodel.NewsState
 import com.project.markmyday.ui.adapter.NewsAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-
-import androidx.activity.viewModels
 
 class GlobalUpdatesActivity : AppCompatActivity() {
 

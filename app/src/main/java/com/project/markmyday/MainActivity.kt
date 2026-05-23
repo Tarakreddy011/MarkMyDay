@@ -125,13 +125,13 @@ class MainActivity : AppCompatActivity() {
                                         val studentId = Uri.encode(result.studentId ?: "N/A")
                                         val displayRole = if (result.homeSection != null && result.homeSection != "N/A") "Class ${result.homeSection}" else result.role
                                         val encodedDisplayRole = Uri.encode(displayRole)
-                                        "student_dashboard/$encodedName/$encodedDisplayRole/$studentId"
+                                        "student_dashboard/$encodedName/$encodedDisplayRole/$studentId/${result.uid}"
                                     }
                                     else -> {
                                         val studentId = Uri.encode(result.studentId ?: "N/A")
                                         val displayRole = if (result.homeSection != null && result.homeSection != "N/A") "Class ${result.homeSection}" else result.role
                                         val encodedDisplayRole = Uri.encode(displayRole)
-                                        "student_dashboard/$encodedName/$encodedDisplayRole/$studentId"
+                                        "student_dashboard/$encodedName/$encodedDisplayRole/$studentId/${result.uid}"
                                     }
                                 }
                                 AppNavigation(

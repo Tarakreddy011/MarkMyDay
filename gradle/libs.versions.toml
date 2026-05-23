@@ -30,9 +30,12 @@ mlkitBarcode = "17.3.0"
 poi = "5.5.1"
 androidYoutubePlayer = "13.0.0"
 coil = "2.6.0"
+vico = "3.1.0"
 androidxCoreSplashscreen = "1.2.0"
 
 [libraries]
+vicoCompose = { group = "com.patrykandpatrick.vico", name = "compose", version.ref = "vico" }
+vicoComposeM3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidxCoreSplashscreen" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

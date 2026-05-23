@@ -91,6 +91,8 @@ import com.project.markmyday.viewmodel.TeacherViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,6 +102,7 @@ fun AdminDashboard(
     onNotificationClick: () -> Unit,
     onTileClick: (String) -> Unit,
     onNavigate: (String) -> Unit,
+    navController: NavHostController
 ) {
     val decodedName = remember(userName) { 
         try { java.net.URLDecoder.decode(userName, "UTF-8") } catch (e: Exception) { userName } 
@@ -131,17 +134,25 @@ fun AdminDashboard(
     }
 
     // Dynamic stats from ViewModels
-    val stats = listOf(
-        StatItem(Icons.Outlined.Badge, stringResource(R.string.tile_staff_list), teachers.size, Color(0xFF4CAF50)),
-        StatItem(Icons.Outlined.People, stringResource(R.string.tile_students), students.size, Color(0xFF2196F3)),
-        StatItem(Icons.Outlined.HistoryEdu, stringResource(R.string.tile_manage_leaves), pendingLeavesCount, Color(0xFFFF9800)),
-        StatItem(Icons.Outlined.Campaign, stringResource(R.string.tile_notices), notifications.size, Color(0xFF9C27B0))
-    )
+    val staffLabel = stringResource(R.string.tile_staff_list)
+    val studentsLabel = stringResource(R.string.tile_students)
+    val leavesLabel = stringResource(R.string.tile_manage_leaves)
+    val noticesLabel = stringResource(R.string.tile_notices)
+
+    val stats = remember(teachers.size, students.size, pendingLeavesCount, notifications.size) {
+        listOf(
+            StatItem(Icons.Outlined.Badge, staffLabel, teachers.size, Color(0xFF4CAF50)),
+            StatItem(Icons.Outlined.People, studentsLabel, students.size, Color(0xFF2196F3)),
+            StatItem(Icons.Outlined.HistoryEdu, leavesLabel, pendingLeavesCount, Color(0xFFFF9800)),
+            StatItem(Icons.Outlined.Campaign, noticesLabel, notifications.size, Color(0xFF9C27B0))
+        )
+    }
 
     val adminTiles = listOf(
         DashboardTile("notices", stringResource(R.string.tile_notices), Icons.Default.Campaign),
         DashboardTile("staff_management", stringResource(R.string.tile_staff_list), Icons.Default.Badge),
         DashboardTile("attendance_overview", stringResource(R.string.tile_daily_overview), Icons.AutoMirrored.Filled.FactCheck),
+        DashboardTile("attendance_stats", "Attendance Stats", Icons.Default.AutoGraph),
         DashboardTile("attendance_reports", "Attendance Reports", Icons.Default.Assessment),
         DashboardTile("create_timetable", stringResource(R.string.tile_create_timetable), Icons.Default.CalendarToday),
         DashboardTile("add_staff", stringResource(R.string.tile_add_staff), Icons.Default.PersonAdd),
@@ -400,7 +411,8 @@ fun AdminDashboardDarkPreview() {
         AdminDashboard(
             onNotificationClick = {},
             onTileClick = {},
-            onNavigate = {}
+            onNavigate = {},
+            navController = rememberNavController()
         )
     }
 }
@@ -412,7 +424,8 @@ fun AdminDashboardPreview() {
         AdminDashboard(
             onNotificationClick = {},
             onTileClick = {},
-            onNavigate = {}
+            onNavigate = {},
+            navController = rememberNavController()
         )
     }
 }

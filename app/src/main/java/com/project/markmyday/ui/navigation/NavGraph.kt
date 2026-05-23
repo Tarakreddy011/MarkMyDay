@@ -28,9 +28,14 @@ sealed class Screen(val route: String) {
     object Admissions : Screen("admissions")
     object StaffManagement : Screen("staff_management")
     object AdminAttendanceReport : Screen("admin_attendance_report")
+    object AdminAttendanceStats : Screen("admin_attendance_stats")
     object StudentAttendanceReport : Screen("student_attendance_report/{uid}") {
         fun createRoute(uid: String) = "student_attendance_report/$uid"
     }
+    object StudentAttendanceDashboard : Screen("student_attendance_dashboard/{studentId}") {
+        fun createRoute(studentId: String) = "student_attendance_dashboard/$studentId"
+    }
+    object StudentLeave : Screen("student_leave")
     object AttendanceMarking : Screen("attendance_marking")
     object StudentManagement : Screen("student_management")
     object MyHomeStudents : Screen("myhome_students")
@@ -87,7 +92,7 @@ fun AppNavigation(
     // Track the last dashboard route to know where "Home" should go
     var lastDashboardRoute by rememberSaveable { mutableStateOf(initialDashboardRoute ?: "") }
 
-    NavHost(navController = navController, startDestination = Screen.Authentication.route) {
+    NavHost(navController = navController, startDestination = startDestination) {
         composable(Screen.Authentication.route) {
             AuthenticationScreen(onLoginSuccess = { name, role, studentId, section, subject, uid ->
                 // Routing logic based on user role
@@ -178,7 +183,8 @@ fun AppNavigation(
                         "settings" -> navController.navigate(Screen.Settings.route)
                     }
                 },
-                onNavigate = { route -> handleBottomNav(route, navController, lastDashboardRoute) }
+                onNavigate = { route -> handleBottomNav(route, navController, lastDashboardRoute) },
+                navController = navController
             )
         }
         
@@ -275,6 +281,7 @@ fun AppNavigation(
                         "timetable" -> navController.navigate(Screen.AdminTimetableClasses.route)
                         "staff_management" -> navController.navigate(Screen.StaffManagement.route)
                         "attendance_reports" -> navController.navigate(Screen.AdminAttendanceReport.route)
+                        "attendance_stats" -> navController.navigate(Screen.AdminAttendanceStats.route)
                         "attendance_overview" -> {
                             context.startActivity(android.content.Intent(context, AdminAttendanceOverviewActivity::class.java))
                         }
@@ -285,7 +292,8 @@ fun AppNavigation(
                         // Add more routing as screens are implemented
                     }
                 },
-                onNavigate = { route -> handleBottomNav(route, navController, lastDashboardRoute) }
+                onNavigate = { route -> handleBottomNav(route, navController, lastDashboardRoute) },
+                navController = navController
             )
         }
         
@@ -303,6 +311,10 @@ fun AppNavigation(
 
         composable(Screen.AdminAttendanceReport.route) {
             AdminAttendanceReportScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.AdminAttendanceStats.route) {
+            AdminAttendanceStatsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.AdminTimetableClasses.route) {
@@ -334,6 +346,21 @@ fun AppNavigation(
                 studentUid = uid,
                 onBack = { navController.popBackStack() }
             )
+        }
+
+        composable(
+            route = Screen.StudentAttendanceDashboard.route,
+            arguments = listOf(navArgument("studentId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val studentId = backStackEntry.arguments?.getString("studentId") ?: ""
+            StudentAttendanceDashboardScreen(
+                studentId = studentId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.StudentLeave.route) {
+            LeaveScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.AttendanceMarking.route) {

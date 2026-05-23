@@ -1,17 +1,14 @@
 package com.project.markmyday.ui.screens
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -21,11 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,7 +29,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.project.markmyday.ui.theme.MarkMyDayTheme
 import com.project.markmyday.R
 import com.project.markmyday.viewmodel.TimetableViewModel
-import com.project.markmyday.data.model.Timetable
 import com.project.markmyday.viewmodel.DigitalDiaryViewModel
 
 
@@ -45,6 +36,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.project.markmyday.viewmodel.NotificationViewModel
+import com.project.markmyday.ui.navigation.Screen
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +50,7 @@ fun StudentDashboard(
     onNotificationClick: () -> Unit,
     onTileClick: (String) -> Unit,
     onNavigate: (String) -> Unit,
+    navController: NavHostController
 ) {
     val notificationViewModel: NotificationViewModel = viewModel()
     val hasUnread by notificationViewModel.hasUnreadNotices.collectAsState()
@@ -64,39 +59,18 @@ fun StudentDashboard(
         notificationViewModel.fetchNotifications(userRole)
     }
 
-    var currentSubScreen by remember { mutableStateOf("home") }
-
-    // Handle back button to go back to home if we are in a sub-screen
-    BackHandler(enabled = currentSubScreen != "home") {
-        currentSubScreen = "home"
-    }
-
     var searchQuery by remember { mutableStateOf("") }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            when (currentSubScreen) {
-                "home" -> DashboardTopBar(
-                    icon = Icons.Default.Face,
-                    title = stringResource(R.string.my_school_life),
-                    onNotificationClick = onNotificationClick,
-                    notificationCount = if (hasUnread) 1 else 0,
-                    onProfileClick = { onTileClick("settings") }
-                )
-                "attendance" -> DashboardTopBar(
-                    title = stringResource(R.string.tile_attendance),
-                    onNotificationClick = onNotificationClick,
-                    notificationCount = if (hasUnread) 1 else 0,
-                    onBackClick = { currentSubScreen = "home" }
-                )
-                "leave" -> DashboardTopBar(
-                    title = stringResource(R.string.tile_leave),
-                    onNotificationClick = onNotificationClick,
-                    notificationCount = if (hasUnread) 1 else 0,
-                    onBackClick = { currentSubScreen = "home" }
-                )
-            }
+            DashboardTopBar(
+                icon = Icons.Default.Face,
+                title = stringResource(R.string.my_school_life),
+                onNotificationClick = onNotificationClick,
+                notificationCount = if (hasUnread) 1 else 0,
+                onProfileClick = { onTileClick("settings") }
+            )
         },
         bottomBar = {
             DashboardBottomBar(currentRoute = "dashboard", onNavigate = onNavigate)
@@ -107,31 +81,26 @@ fun StudentDashboard(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            when (currentSubScreen) {
-                "home" -> {
-                    SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
-                    Spacer(modifier = Modifier.height(8.dp))
-                    StudentDashboardHomeContent(
-                        userName = userName,
-                        userRole = userRole,
-                        studentId = studentId,
-                        uid = uid,
-                        searchQuery = searchQuery,
-                        onTileClick = { id ->
-                            when (id) {
-                                "attendance" -> currentSubScreen = "attendance"
-                                "leave" -> currentSubScreen = "leave"
-                                else -> onTileClick(id)
-                            }
+            SearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
+            Spacer(modifier = Modifier.height(8.dp))
+            StudentDashboardHomeContent(
+                userName = userName,
+                userRole = userRole,
+                studentId = studentId,
+                uid = uid,
+                searchQuery = searchQuery,
+                onTileClick = { id ->
+                    when (id) {
+                        "attendance" -> {
+                            navController.navigate(Screen.StudentAttendanceDashboard.createRoute(uid))
                         }
-                    )
+                        "leave" -> {
+                            navController.navigate(Screen.StudentLeave.route)
+                        }
+                        else -> onTileClick(id)
+                    }
                 }
-                "attendance" -> StudentAttendanceDashboardScreen(
-                    uid = uid,
-                    onBack = { currentSubScreen = "home" }
-                )
-                "leave" -> LeaveScreen(onBack = { currentSubScreen = "home" })
-            }
+            )
         }
     }
 }
@@ -283,6 +252,11 @@ fun StudentDashboardHomeContent(
             }
         }
 
+        // 2.5 Absence Alerts
+        item(span = { GridItemSpan(2) }) {
+            AbsenceAlertList(studentUid = uid)
+        }
+
         // 3. Timetable Section
         item(span = { GridItemSpan(2) }) {
             TimetableSection(
@@ -337,6 +311,11 @@ private fun getCurrentDate(): String {
 @Composable
 fun StudentDashboardPreview() {
     MarkMyDayTheme {
-        StudentDashboard(onNotificationClick = {}, onTileClick = {}, onNavigate = {})
+        StudentDashboard(
+            onNotificationClick = {},
+            onTileClick = {},
+            onNavigate = {},
+            navController = rememberNavController()
+        )
     }
 }
