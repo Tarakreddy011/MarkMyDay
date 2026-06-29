@@ -25,3 +25,5 @@ interface NewsApiService {
     ): Response<NewsResponse>
 }
 //comment for check
+//test git
+
