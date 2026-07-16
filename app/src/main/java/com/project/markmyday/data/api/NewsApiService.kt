@@ -24,3 +24,8 @@ interface NewsApiService {
         @Query("token") apiKey: String = "9f23f4386cc86284722ffe7a62474f28"
     ): Response<NewsResponse>
 }
+//comment for check
+//test git
+
+
+
