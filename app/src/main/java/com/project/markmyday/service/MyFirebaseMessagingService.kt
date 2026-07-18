@@ -1,4 +1,4 @@
-package com.project.markmyday
+package com.project.markmyday.service
 
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService

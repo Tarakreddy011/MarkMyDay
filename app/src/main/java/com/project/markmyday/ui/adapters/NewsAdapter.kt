@@ -1,4 +1,4 @@
-package com.project.markmyday.ui.adapter
+package com.project.markmyday.ui.adapters
 
 import android.content.Intent
 import android.net.Uri

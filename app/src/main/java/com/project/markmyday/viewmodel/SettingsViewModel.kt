@@ -10,7 +10,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.markmyday.data.model.UserProfile
-import com.project.markmyday.unsubscribeFromTopics
+import com.project.markmyday.utils.unsubscribeFromTopics
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
