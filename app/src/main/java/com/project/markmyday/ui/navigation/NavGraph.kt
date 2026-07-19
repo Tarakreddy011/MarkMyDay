@@ -305,7 +305,8 @@ fun AppNavigation(
                 teachers = teachers,
                 onEditTeacher = { teacherViewModel.updateTeacher(it) },
                 onDeleteTeacher = { teacherViewModel.deleteTeacher(it.teacherId) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onNotificationClick = { navController.navigate("notifications/Admin") }
             )
         }
 

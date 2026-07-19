@@ -37,7 +37,8 @@ fun StaffManagementScreen(
     teachers: List<Teacher>,
     onEditTeacher: (Teacher) -> Unit,
     onDeleteTeacher: (Teacher) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNotificationClick: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
@@ -134,8 +135,9 @@ fun StaffManagementScreen(
         topBar = {
             DashboardTopBar(
                 title = stringResource(R.string.staff_list_title),
-                onNotificationClick = { /* TODO */ },
-                icon = Icons.Default.People
+                onNotificationClick = onNotificationClick,
+                icon = Icons.Default.People,
+                onBackClick = onBack
             )
         }
     ) { padding ->
