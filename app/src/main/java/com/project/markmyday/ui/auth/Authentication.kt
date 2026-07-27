@@ -1,4 +1,4 @@
-package com.project.markmyday.ui.Auth
+package com.project.markmyday.ui.auth
 
 import android.content.res.Configuration
 import android.widget.Toast

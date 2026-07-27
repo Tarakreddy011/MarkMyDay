@@ -46,18 +46,26 @@ fun AttendanceStatusContainer(onFinish: () -> Unit) {
             return@LaunchedEffect
         }
 
-        // First, get the teacherId from the users collection
+        // Support both teacher and student roles
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { userDoc ->
                 val teacherId = userDoc.getString("teacherId")
-                if (teacherId == null) {
-                    attendanceStatus = AttendanceState.Error("Teacher ID not found")
+                val studentId = userDoc.getString("studentId")
+                val targetCollection = when {
+                    !teacherId.isNullOrEmpty() -> "teachers" to teacherId
+                    !studentId.isNullOrEmpty() -> "students" to studentId
+                    else -> null
+                }
+
+                if (targetCollection == null) {
+                    attendanceStatus = AttendanceState.Error("User record not found")
                     return@addOnSuccessListener
                 }
 
+                val (collectionName, recordId) = targetCollection
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                firestore.collection("teachers")
-                    .document(teacherId)
+                firestore.collection(collectionName)
+                    .document(recordId)
                     .collection("attendance_logs")
                     .document(today)
                     .get()

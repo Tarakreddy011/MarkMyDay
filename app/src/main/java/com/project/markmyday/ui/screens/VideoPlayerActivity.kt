@@ -22,6 +22,7 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFram
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import com.project.markmyday.data.repository.EngagementRepository
 import com.project.markmyday.databinding.ActivityVideoPlayerBinding
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,7 +59,13 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        videoId = intent.getStringExtra("VIDEO_ID") ?: return
+        val rawVideoId = intent.getStringExtra("VIDEO_ID")
+        if (rawVideoId.isNullOrEmpty()) {
+            Toast.makeText(this, "Video unavailable", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+        videoId = rawVideoId
         videoTitle = intent.getStringExtra("TITLE") ?: "Lesson"
         studentId = intent.getStringExtra("STUDENT_ID") ?: ""
         studentName = intent.getStringExtra("STUDENT_NAME") ?: "Student"
@@ -193,7 +200,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             val secondsToSync = activeSeconds
             activeSeconds = 0
             
-            CoroutineScope(Dispatchers.IO).launch {
+            lifecycleScope.launch(Dispatchers.IO) {
                 engagementRepository.updateWatchTime(
                     studentId = studentId,
                     studentName = studentName,

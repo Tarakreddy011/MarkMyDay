@@ -4,13 +4,15 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.project.markmyday.databinding.ActivityGlobalUpdatesBinding
 import com.project.markmyday.viewmodel.GlobalUpdatesViewModel
 import com.project.markmyday.viewmodel.NewsState
-import com.project.markmyday.ui.adapter.NewsAdapter
+import com.project.markmyday.ui.adapters.NewsAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -51,21 +53,23 @@ class GlobalUpdatesActivity : AppCompatActivity() {
         viewModel = ViewModelProvider(this)[GlobalUpdatesViewModel::class.java]
 
         lifecycleScope.launch {
-            viewModel.newsState.collectLatest { state ->
-                when (state) {
-                    is NewsState.Loading -> {
-                        binding.progressBar.visibility = View.VISIBLE
-                        binding.swipeRefreshLayout.isRefreshing = true
-                    }
-                    is NewsState.Success -> {
-                        binding.progressBar.visibility = View.GONE
-                        binding.swipeRefreshLayout.isRefreshing = false
-                        newsAdapter.submitList(state.articles)
-                    }
-                    is NewsState.Error -> {
-                        binding.progressBar.visibility = View.GONE
-                        binding.swipeRefreshLayout.isRefreshing = false
-                        Toast.makeText(this@GlobalUpdatesActivity, state.message, Toast.LENGTH_LONG).show()
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.newsState.collectLatest { state ->
+                    when (state) {
+                        is NewsState.Loading -> {
+                            binding.progressBar.visibility = View.VISIBLE
+                            binding.swipeRefreshLayout.isRefreshing = true
+                        }
+                        is NewsState.Success -> {
+                            binding.progressBar.visibility = View.GONE
+                            binding.swipeRefreshLayout.isRefreshing = false
+                            newsAdapter.submitList(state.articles)
+                        }
+                        is NewsState.Error -> {
+                            binding.progressBar.visibility = View.GONE
+                            binding.swipeRefreshLayout.isRefreshing = false
+                            Toast.makeText(this@GlobalUpdatesActivity, state.message, Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }

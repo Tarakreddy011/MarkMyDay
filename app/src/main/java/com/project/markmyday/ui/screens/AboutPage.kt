@@ -91,8 +91,8 @@ fun AboutScreen(onBack: () -> Unit) {
 fun CreatorsSection() {
     val creators = remember {
         listOf(
-            Creator("Tarak", "Android Developer", R.drawable.tarak),
             Creator("Yash", "Android Developer", R.drawable.yash),
+            Creator("Tarak", "Android Developer", R.drawable.tarak),
             Creator("Teja Reddy", "Android Developer", R.drawable.teja)
         )
     }

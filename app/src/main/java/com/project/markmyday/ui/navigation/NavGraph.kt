@@ -11,7 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.project.markmyday.ui.screens.*
-import com.project.markmyday.ui.Auth.AuthenticationScreen
+import com.project.markmyday.ui.auth.AuthenticationScreen
 import com.project.markmyday.viewmodel.AuthViewModel
 import com.project.markmyday.viewmodel.AuthResult
 import com.project.markmyday.viewmodel.TeacherViewModel
@@ -305,7 +305,8 @@ fun AppNavigation(
                 teachers = teachers,
                 onEditTeacher = { teacherViewModel.updateTeacher(it) },
                 onDeleteTeacher = { teacherViewModel.deleteTeacher(it.teacherId) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onNotificationClick = { navController.navigate("notifications/Admin") }
             )
         }
 
@@ -530,7 +531,7 @@ fun AppNavigation(
         }
 
         composable(Screen.Settings.route) {
-            com.project.markmyday.settings.SettingsScreen(
+            SettingsScreen(
                 viewModel = LocalSettingsViewModel.current,
                 onBack = { navController.popBackStack() },
                 onLogout = {
