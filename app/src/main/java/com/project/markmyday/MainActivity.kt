@@ -153,7 +153,9 @@ class MainActivity : AppCompatActivity() {
                 Log.w("FCM", "Fetching FCM registration token failed", task.exception)
                 return@addOnCompleteListener
             }
-
+/**
+*this is main activity just for pull request
+**/
             // Get new FCM registration token
             val token = task.result
 
