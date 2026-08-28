@@ -12,50 +12,118 @@ import kotlinx.coroutines.yield
 
 class TimetableGenerator {
 
-    val daysOfWeek = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+    companion object {
+        private const val TAG = "TimetableAlgo"
 
-    // 1. Generate Quota
+        private const val PRIMARY_PERIODS = 7
+        private const val OTHER_PERIODS = 10
+
+        private const val MAX_SUBJECTS_PER_DAY = 3
+        private const val MAX_CONSECUTIVE_SAME_SUBJECT = 2
+
+        private const val LEISURE_SUBJECT = "Leisure"
+        private const val UNASSIGNED_TEACHER = "UNASSIGNED"
+    }
+
+    val daysOfWeek = listOf(
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday"
+    )
+
+    // -------------------------------------------------------------------------
+    // 1. DEFAULT QUOTA GENERATION
+    // -------------------------------------------------------------------------
+
     fun generateDefaultQuota(
         category: String,
         homeTeacher: Teacher?,
         availableTeachers: List<Teacher>
     ): MutableMap<String, SubjectQuota> {
+
         val quotaMap = mutableMapOf<String, SubjectQuota>()
 
         val subjectDistribution = when (category) {
+
             "Primary" -> mapOf(
-                "Telugu" to 6, "Hindi" to 6, "English" to 6,
-                "Math" to 8, "Science" to 8, "Social" to 8
-            ) // Total 42
+                "Telugu" to 6,
+                "Hindi" to 6,
+                "English" to 6,
+                "Math" to 8,
+                "Science" to 8,
+                "Social" to 8
+            )
+
             "Secondary" -> mapOf(
-                "Telugu" to 6, "Hindi" to 6, "English" to 6,
-                "Math" to 14, "Science" to 14, "Social" to 14
-            ) // Total 60
+                "Telugu" to 6,
+                "Hindi" to 6,
+                "English" to 6,
+                "Math" to 14,
+                "Science" to 14,
+                "Social" to 14
+            )
+
             "High School" -> mapOf(
-                "Telugu" to 6, "Hindi" to 6, "English" to 6,
-                "Math" to 11, "Phy" to 11, "Bio" to 10, "Social" to 10
-            ) // Total 60
+                "Telugu" to 6,
+                "Hindi" to 6,
+                "English" to 6,
+                "Math" to 11,
+                "Phy" to 11,
+                "Bio" to 10,
+                "Social" to 10
+            )
+
             else -> emptyMap()
         }
 
         for ((subject, count) in subjectDistribution) {
-            val assignedTeacher = if (homeTeacher?.subject == subject) {
-                homeTeacher
-            } else {
-                availableTeachers.firstOrNull { it.subject == subject && it.classesTaughtCategories.contains(category) }
-            }
+
+            val assignedTeacher = findTeacherForSubject(
+                subject = subject,
+                category = category,
+                homeTeacher = homeTeacher,
+                availableTeachers = availableTeachers
+            )
 
             quotaMap[subject] = SubjectQuota(
                 subject = subject,
                 classCount = count,
-                teacherId = assignedTeacher?.teacherId ?: "UNASSIGNED",
+                teacherId = assignedTeacher?.teacherId ?: UNASSIGNED_TEACHER,
                 teacherName = assignedTeacher?.name ?: "No Teacher"
             )
         }
+
         return quotaMap
     }
 
-    // 2. The Backtracking Scheduler
+    private fun findTeacherForSubject(
+        subject: String,
+        category: String,
+        homeTeacher: Teacher?,
+        availableTeachers: List<Teacher>
+    ): Teacher? {
+
+        // Prefer home teacher if they teach this subject
+        if (homeTeacher?.subject == subject &&
+            homeTeacher.classesTaughtCategories.contains(category)
+        ) {
+            return homeTeacher
+        }
+
+        // Otherwise find another suitable teacher
+        return availableTeachers.firstOrNull {
+            it.subject == subject &&
+                    it.classesTaughtCategories.contains(category)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. MAIN GENERATOR
+    // -------------------------------------------------------------------------
+
     suspend fun generateScheduleForClass(
         category: String,
         quotaMap: Map<String, SubjectQuota>,
@@ -64,102 +132,347 @@ class TimetableGenerator {
         currentClassName: String
     ): Map<String, DaySchedule> = withContext(Dispatchers.Default) {
 
-        val periodsPerDay = if (category == "Primary") 7 else 10
-        val totalSlotsInWeek = periodsPerDay * daysOfWeek.size
+        val periodsPerDay = getPeriodsPerDay(category)
+        val totalSlots = periodsPerDay * daysOfWeek.size
 
-        // Make a mutable copy of quotas to track remaining classes
-        val workingQuota = quotaMap.toMutableMap()
-        val assignedClasses = workingQuota.values.sumOf { it.classCount }
-        val leisurePeriodsNeeded = totalSlotsInWeek - assignedClasses
+        val workingQuota = quotaMap
+            .mapValues { (_, quota) -> quota.copy() }
+            .toMutableMap()
 
-        if (leisurePeriodsNeeded > 0) {
-            workingQuota["Leisure"] = SubjectQuota("Leisure", "NONE", "Free Period", leisurePeriodsNeeded)
+        val totalRequiredClasses = workingQuota.values.sumOf {
+            it.classCount
         }
 
-        val schedule = mutableMapOf<String, MutableList<Period?>>()
-        for (day in daysOfWeek) {
-            schedule[day] = MutableList(periodsPerDay) { null }
+        // ---------------------------------------------------------------------
+        // Check if quota is larger than available timetable slots
+        // ---------------------------------------------------------------------
+
+        if (totalRequiredClasses > totalSlots) {
+
+            Log.e(
+                TAG,
+                "Impossible timetable: required=$totalRequiredClasses, slots=$totalSlots"
+            )
+
+            return@withContext emptySchedule(periodsPerDay)
         }
 
-        // Pre-fill Period 1 with Home Teacher, BUT respect the quota!
-        val homeTeacherSubject = workingQuota.values.firstOrNull { it.teacherId == homeTeacherId }?.subject
-        if (homeTeacherSubject != null) {
-            for (day in daysOfWeek) {
-                val currentCount = workingQuota[homeTeacherSubject]!!.classCount
-                if (currentCount > 0) {
-                    val (start, end) = getPeriodTimings(1)
-                    schedule[day]!![0] = Period(
-                        periodNumber = 1,
-                        startTime = start,
-                        endTime = end,
-                        subject = homeTeacherSubject,
-                        teacherId = homeTeacherId,
-                        teacherName = workingQuota[homeTeacherSubject]!!.teacherName
-                    )
-                    workingQuota[homeTeacherSubject] = workingQuota[homeTeacherSubject]!!.copy(classCount = currentCount - 1)
-                }
-            }
+        // ---------------------------------------------------------------------
+        // Add Leisure
+        // ---------------------------------------------------------------------
+
+        val leisureSlots = totalSlots - totalRequiredClasses
+
+        if (leisureSlots > 0) {
+
+            workingQuota[LEISURE_SUBJECT] = SubjectQuota(
+                subject = LEISURE_SUBJECT,
+                teacherId = "NONE",
+                teacherName = "Free Period",
+                classCount = leisureSlots
+            )
         }
 
-        // Start Backtracking from Day 0, Period 0
-        val success = solve(schedule, workingQuota, 0, 0, periodsPerDay, allExistingTimetables, currentClassName)
-        if (!success) Log.e("TimetableAlgo", "Could not find a 100% conflict-free schedule. Returning partial.")
+        // ---------------------------------------------------------------------
+        // Create empty schedule
+        // ---------------------------------------------------------------------
 
-        // Convert Map<String, MutableList<Period?>> to Map<String, DaySchedule>
-        return@withContext schedule.mapValues { (_, periods) ->
-            DaySchedule(periods.filterNotNull())
+        val schedule = createEmptySchedule(periodsPerDay)
+
+        // ---------------------------------------------------------------------
+        // Reserve Period 1 for Home Teacher
+        // ---------------------------------------------------------------------
+
+        reserveHomeTeacherPeriods(
+            schedule = schedule,
+            quota = workingQuota,
+            homeTeacherId = homeTeacherId,
+            periodsPerDay = periodsPerDay
+        )
+
+        // ---------------------------------------------------------------------
+        // Start Backtracking
+        // ---------------------------------------------------------------------
+
+        val success = solve(
+            schedule = schedule,
+            quota = workingQuota,
+            dayIndex = 0,
+            periodIndex = 0,
+            periodsPerDay = periodsPerDay,
+            allExistingTimetables = allExistingTimetables,
+            currentClassName = currentClassName
+        )
+
+        if (!success) {
+
+            Log.e(
+                TAG,
+                "Unable to generate conflict-free timetable for $currentClassName"
+            )
+
+            return@withContext emptySchedule(periodsPerDay)
+        }
+
+        // ---------------------------------------------------------------------
+        // Convert to DaySchedule
+        // ---------------------------------------------------------------------
+
+        schedule.mapValues { (_, periods) ->
+            DaySchedule(
+                periods = periods.filterNotNull()
+            )
         }
     }
+
+    // -------------------------------------------------------------------------
+    // 3. EMPTY SCHEDULE
+    // -------------------------------------------------------------------------
+
+    private fun createEmptySchedule(
+        periodsPerDay: Int
+    ): MutableMap<String, MutableList<Period?>> {
+
+        return daysOfWeek.associateWith {
+            MutableList<Period?>(periodsPerDay) { null }
+        }.toMutableMap()
+    }
+
+    private fun emptySchedule(
+        periodsPerDay: Int
+    ): Map<String, DaySchedule> {
+
+        return daysOfWeek.associateWith {
+            DaySchedule(
+                periods = emptyList()
+            )
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. HOME TEACHER RESERVATION
+    // -------------------------------------------------------------------------
+
+    private fun reserveHomeTeacherPeriods(
+        schedule: MutableMap<String, MutableList<Period?>>,
+        quota: MutableMap<String, SubjectQuota>,
+        homeTeacherId: String,
+        periodsPerDay: Int
+    ) {
+
+        val homeTeacherQuota = quota.values.firstOrNull {
+            it.teacherId == homeTeacherId &&
+                    it.subject != LEISURE_SUBJECT &&
+                    it.classCount > 0
+        } ?: return
+
+        val subject = homeTeacherQuota.subject
+
+        for (day in daysOfWeek) {
+
+            val remaining = quota[subject]?.classCount ?: 0
+
+            if (remaining <= 0) {
+                break
+            }
+
+            val (start, end) = getPeriodTimings(1)
+
+            schedule[day]!![0] = Period(
+                periodNumber = 1,
+                startTime = start,
+                endTime = end,
+                subject = subject,
+                teacherId = homeTeacherId,
+                teacherName = homeTeacherQuota.teacherName
+            )
+
+            quota[subject] = homeTeacherQuota.copy(
+                classCount = remaining - 1
+            )
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. BACKTRACKING SOLVER
+    // -------------------------------------------------------------------------
 
     private suspend fun solve(
         schedule: MutableMap<String, MutableList<Period?>>,
         quota: MutableMap<String, SubjectQuota>,
         dayIndex: Int,
-        periodIndex: Int, // 0-indexed internally
+        periodIndex: Int,
         periodsPerDay: Int,
         allExistingTimetables: List<Timetable>,
         currentClassName: String
     ): Boolean {
-        yield() // Keep UI responsive
 
-        if (dayIndex == daysOfWeek.size) return true // Done!
-        val currentDay = daysOfWeek[dayIndex]
+        yield()
 
-        if (periodIndex >= periodsPerDay) {
-            return solve(schedule, quota, dayIndex + 1, 0, periodsPerDay, allExistingTimetables, currentClassName)
-        }
+        // ---------------------------------------------------------------------
+        // Finished
+        // ---------------------------------------------------------------------
 
-        // If slot is already filled (like Home Teacher in Period 1), skip to the next period
-        if (schedule[currentDay]!![periodIndex] != null) {
-            return solve(schedule, quota, dayIndex, periodIndex + 1, periodsPerDay, allExistingTimetables, currentClassName)
-        }
-
-        // Heuristic: Try subjects with the highest remaining classCount first.
-        // This prevents getting stuck at the end of the week with 4 classes of the same subject.
-        val availableSubjects = quota.values
-            .filter { it.classCount > 0 }
-            .sortedByDescending { it.classCount }
-
-        for (item in availableSubjects) {
-            if (isValidPlacement(schedule, currentDay, periodIndex, item, allExistingTimetables, currentClassName)) {
-
-                // 1. PLACE
-                val (start, end) = getPeriodTimings(periodIndex + 1)
-                schedule[currentDay]!![periodIndex] = Period(periodIndex + 1, startTime = start, endTime = end, subject = item.subject, teacherId = item.teacherId, teacherName = item.teacherName)
-                quota[item.subject] = item.copy(classCount = item.classCount - 1)
-
-                // 2. RECURSE
-                if (solve(schedule, quota, dayIndex, periodIndex + 1, periodsPerDay, allExistingTimetables, currentClassName)) {
-                    return true
-                }
-
-                // 3. BACKTRACK (Safely restore the original snapshot)
-                schedule[currentDay]!![periodIndex] = null
-                quota[item.subject] = item // Puts the original count back exactly as it was!
+        if (dayIndex >= daysOfWeek.size) {
+            return quota.values.all {
+                it.classCount == 0
             }
         }
+
+        // ---------------------------------------------------------------------
+        // Move to next day
+        // ---------------------------------------------------------------------
+
+        if (periodIndex >= periodsPerDay) {
+
+            return solve(
+                schedule,
+                quota,
+                dayIndex + 1,
+                0,
+                periodsPerDay,
+                allExistingTimetables,
+                currentClassName
+            )
+        }
+
+        val currentDay = daysOfWeek[dayIndex]
+
+        // ---------------------------------------------------------------------
+        // Already occupied
+        // ---------------------------------------------------------------------
+
+        if (schedule[currentDay]!![periodIndex] != null) {
+
+            return solve(
+                schedule,
+                quota,
+                dayIndex,
+                periodIndex + 1,
+                periodsPerDay,
+                allExistingTimetables,
+                currentClassName
+            )
+        }
+
+        // ---------------------------------------------------------------------
+        // Get candidate subjects
+        // ---------------------------------------------------------------------
+
+        val candidates = getCandidates(
+            schedule = schedule,
+            day = currentDay,
+            periodIndex = periodIndex,
+            quota = quota,
+            allExistingTimetables = allExistingTimetables,
+            currentClassName = currentClassName
+        )
+
+        // ---------------------------------------------------------------------
+        // Try each candidate
+        // ---------------------------------------------------------------------
+
+        for (item in candidates) {
+
+            if (!isValidPlacement(
+                    schedule = schedule,
+                    day = currentDay,
+                    periodIndex = periodIndex,
+                    item = item,
+                    allExistingTimetables = allExistingTimetables,
+                    currentClassName = currentClassName
+                )
+            ) {
+                continue
+            }
+
+            // PLACE
+
+            val (start, end) = getPeriodTimings(
+                periodIndex + 1
+            )
+
+            schedule[currentDay]!![periodIndex] = Period(
+                periodNumber = periodIndex + 1,
+                startTime = start,
+                endTime = end,
+                subject = item.subject,
+                teacherId = item.teacherId,
+                teacherName = item.teacherName
+            )
+
+            quota[item.subject] = item.copy(
+                classCount = item.classCount - 1
+            )
+
+            // RECURSE
+
+            val solved = solve(
+                schedule = schedule,
+                quota = quota,
+                dayIndex = dayIndex,
+                periodIndex = periodIndex + 1,
+                periodsPerDay = periodsPerDay,
+                allExistingTimetables = allExistingTimetables,
+                currentClassName = currentClassName
+            )
+
+            if (solved) {
+                return true
+            }
+
+            // BACKTRACK
+
+            schedule[currentDay]!![periodIndex] = null
+
+            quota[item.subject] = item
+        }
+
         return false
     }
+
+    // -------------------------------------------------------------------------
+    // 6. CANDIDATE SORTING
+    // -------------------------------------------------------------------------
+
+    private fun getCandidates(
+        schedule: MutableMap<String, MutableList<Period?>>,
+        day: String,
+        periodIndex: Int,
+        quota: MutableMap<String, SubjectQuota>,
+        allExistingTimetables: List<Timetable>,
+        currentClassName: String
+    ): List<SubjectQuota> {
+
+        return quota.values
+            .filter { it.classCount > 0 }
+            .filter {
+                isValidPlacement(
+                    schedule = schedule,
+                    day = day,
+                    periodIndex = periodIndex,
+                    item = it,
+                    allExistingTimetables = allExistingTimetables,
+                    currentClassName = currentClassName
+                )
+            }
+            .sortedWith(
+                compareByDescending<SubjectQuota> {
+
+                    // Schedule subjects with more remaining classes first
+                    it.classCount
+
+                }.thenBy {
+
+                    // Leisure should be considered last
+                    if (it.subject == LEISURE_SUBJECT) 1 else 0
+                }
+            )
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. VALIDATION
+    // -------------------------------------------------------------------------
 
     private fun isValidPlacement(
         schedule: MutableMap<String, MutableList<Period?>>,
@@ -169,46 +482,161 @@ class TimetableGenerator {
         allExistingTimetables: List<Timetable>,
         currentClassName: String
     ): Boolean {
-        val todaysClasses = schedule[day]!!.filterNotNull()
 
-        if (item.subject == "Leisure") {
-            return todaysClasses.count { it.subject == "Leisure" } < 1
+        // -------------------------------------------------------------
+        // Leisure
+        // -------------------------------------------------------------
+
+        if (item.subject == LEISURE_SUBJECT) {
+
+            val leisureCount = schedule[day]!!
+                .filterNotNull()
+                .count {
+                    it.subject == LEISURE_SUBJECT
+                }
+
+            // Maximum one leisure period per day
+            return leisureCount == 0
         }
 
-        // Rule 1: Cross-class conflict check
-        val isTeacherBusyElsewhere = allExistingTimetables.any { tb ->
-            tb.className != currentClassName &&
-                    tb.weeklySchedule[day]?.periods?.any { it.periodNumber == periodIndex + 1 && it.teacherId == item.teacherId } == true
+        // -------------------------------------------------------------
+        // Teacher must be assigned
+        // -------------------------------------------------------------
+
+        if (item.teacherId == UNASSIGNED_TEACHER) {
+            return false
         }
-        if (isTeacherBusyElsewhere) return false
 
-        // Rule 2: Max 3 of same subject per day
-        if (todaysClasses.count { it.subject == item.subject } >= 3) return false
+        // -------------------------------------------------------------
+        // Teacher conflict with other classes
+        // -------------------------------------------------------------
 
-        // Rule 3: No 3 consecutive
-        if (periodIndex >= 2) {
-            val p1 = schedule[day]!![periodIndex - 1]?.subject
-            val p2 = schedule[day]!![periodIndex - 2]?.subject
-            if (p1 == item.subject && p2 == item.subject) return false
+        val teacherBusyElsewhere = allExistingTimetables.any { timetable ->
+
+            timetable.className != currentClassName &&
+                    timetable.weeklySchedule[day]
+                        ?.periods
+                        ?.any { period ->
+
+                            period.periodNumber == periodIndex + 1 &&
+                                    period.teacherId == item.teacherId
+
+                        } == true
+        }
+
+        if (teacherBusyElsewhere) {
+            return false
+        }
+
+        // -------------------------------------------------------------
+        // Maximum subject count per day
+        // -------------------------------------------------------------
+
+        val todaysSubjectCount = schedule[day]!!
+            .filterNotNull()
+            .count {
+                it.subject == item.subject
+            }
+
+        if (todaysSubjectCount >= MAX_SUBJECTS_PER_DAY) {
+            return false
+        }
+
+        // -------------------------------------------------------------
+        // No 3 consecutive classes of same subject
+        // -------------------------------------------------------------
+
+        if (hasTooManyConsecutiveSubjects(
+                schedule = schedule,
+                day = day,
+                periodIndex = periodIndex,
+                subject = item.subject
+            )
+        ) {
+            return false
         }
 
         return true
     }
 
-    private fun getPeriodTimings(periodNumber: Int): Pair<String, String> {
-        return when (periodNumber) {
-            1 -> "09:00 AM" to "09:45 AM"
-            2 -> "09:45 AM" to "10:30 AM"
-            3 -> "10:30 AM" to "11:15 AM"
-            4 -> "11:30 AM" to "12:15 PM" // After Short Break
-            5 -> "12:15 PM" to "01:00 PM"
-            6 -> "01:40 PM" to "02:25 PM" // After Lunch Break
-            7 -> "02:25 PM" to "03:10 PM"
-            8 -> "03:20 PM" to "04:05 PM" // After Short Break
-            9 -> "04:05 PM" to "04:50 PM"
-            10 -> "04:50 PM" to "05:30 PM"
-            else -> "" to ""
+    // -------------------------------------------------------------------------
+    // 8. CONSECUTIVE SUBJECT CHECK
+    // -------------------------------------------------------------------------
+
+    private fun hasTooManyConsecutiveSubjects(
+        schedule: MutableMap<String, MutableList<Period?>>,
+        day: String,
+        periodIndex: Int,
+        subject: String
+    ): Boolean {
+
+        if (periodIndex < MAX_CONSECUTIVE_SAME_SUBJECT) {
+            return false
+        }
+
+        var consecutive = 0
+
+        for (index in periodIndex - 1 downTo 0) {
+
+            val previousSubject =
+                schedule[day]!![index]?.subject
+
+            if (previousSubject == subject) {
+                consecutive++
+            } else {
+                break
+            }
+        }
+
+        return consecutive >= MAX_CONSECUTIVE_SAME_SUBJECT
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. PERIOD COUNT
+    // -------------------------------------------------------------------------
+
+    private fun getPeriodsPerDay(
+        category: String
+    ): Int {
+
+        return if (category == "Primary") {
+            PRIMARY_PERIODS
+        } else {
+            OTHER_PERIODS
         }
     }
 
+    // -------------------------------------------------------------------------
+    // 10. PERIOD TIMINGS
+    // -------------------------------------------------------------------------
+
+    private fun getPeriodTimings(
+        periodNumber: Int
+    ): Pair<String, String> {
+
+        return when (periodNumber) {
+
+            1 -> "09:00 AM" to "09:45 AM"
+
+            2 -> "09:45 AM" to "10:30 AM"
+
+            3 -> "10:30 AM" to "11:15 AM"
+
+            4 -> "11:30 AM" to "12:15 PM"
+
+            5 -> "12:15 PM" to "01:00 PM"
+
+            6 -> "01:40 PM" to "02:25 PM"
+
+            7 -> "02:25 PM" to "03:10 PM"
+
+            8 -> "03:20 PM" to "04:05 PM"
+
+            9 -> "04:05 PM" to "04:50 PM"
+
+            10 -> "04:50 PM" to "05:30 PM"
+
+            else -> "" to ""
+        }
+    }
 }
